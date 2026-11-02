@@ -14,3 +14,22 @@
 @media(max-width:767px){.agents{display:block}.section{padding-block:40px}}
 
 .hero{display:block;background-image:none;padding-top:40px}.heroCopy{display:grid;grid-template-columns:7fr 5fr;gap:48px;align-items:end}.hero h1{font-size:clamp(44px,5.4vw,76px);line-height:1.05;letter-spacing:-.02em;margin:0}.heroCopy p{font-size:18px;color:var(--secondary);line-height:1.55}.hero :global(.voyage){margin-top:32px;background:radial-gradient(ellipse at 50% 70%,var(--accent-soft),transparent 70%)}.hero :global(.partner-strip){margin-top:24px}.heroCopy .actions{margin-top:22px}@media(max-width:767px){.hero{padding-top:40px}.heroCopy{grid-template-columns:1fr;gap:24px}.hero h1{font-size:44px}.heroCopy p{font-size:16px}.hero :global(.voyage){margin-top:24px}}
+
+/* Release-page controls follow the shared eight-pixel control shape. */
+.landing a:global(.button){display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:46px;padding:11px 18px;border-radius:8px;font-size:14px;font-weight:600;line-height:1.35;white-space:normal;transition:background-color 150ms ease,border-color 150ms ease}
+.landing a:global(.button) svg{flex:none}
+.landing a:global(.button):hover{border-color:var(--secondary)}
+.landing a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.header nav a{display:inline-flex;align-items:center;gap:7px;min-height:44px}
+.header nav a:hover{color:var(--strong)}
+.heroCopy p{font-size:17px;max-width:48ch}
+.hero small{display:block;color:var(--muted);font-family:inherit;font-size:13px}
+.hero :global(.voyage){background:none}
+.section>p{margin-bottom:24px}
+.agents>p{margin-bottom:20px}
+.agents>a{justify-self:start}
+.srOnly{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:900px){.header{flex-wrap:wrap;gap:12px}.header nav{display:flex;order:4;width:100%;margin:0;border-top:1px solid var(--line);padding-top:8px;gap:24px}.header nav a{font-size:13px}.header>:global(.button){margin-left:auto}}
+@media(max-width:600px){.header{padding:12px 20px}.header>:global(.button){padding:10px 12px;font-size:13px}.header nav{gap:20px}.heroCopy p{font-size:16px}.actions a{min-height:48px}.agents>a{width:100%}}
+@media(prefers-reduced-motion:reduce){.landing a:global(.button){transition:none}}
+@media(max-width:600px){.landing .header>a:global(.button){display:none}.header>:global(button){margin-left:auto}.header nav{justify-content:space-between;gap:12px}}
