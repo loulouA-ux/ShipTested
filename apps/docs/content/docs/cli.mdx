@@ -4,6 +4,37 @@ title: CLI reference
 
 Generated from the CLI command definitions. Version 0.1.0 is published. Requires Node 20.19 or newer.
 
+## batch plan &lt;repositories.json&gt; &lt;plan.json&gt; | batch submit &lt;plan.json&gt; | batch status &lt;plan.json&gt; | batch dry-run &lt;plan.json&gt;
+
+Plan up to 500 explicit repositories without scanning; submit sequentially with saved retry keys, refresh job/report status, or verify live authorization and allowance without submitting. Keep the same plan when resuming. Exit 0 is not a clean verdict.
+
+
+
+## repo &lt;GitHub URL&gt;
+
+Queue a managed repository scan using SHIPTESTED_API_ORIGIN and SHIPTESTED_API_TOKEN. Returns a job ID; exit 0 means accepted, not security checks passed.
+
+- `--private`
+- `--request-key UUID (reuse when retrying the same submission)`
+
+## job &lt;id&gt;
+
+Read a managed scan job and its private report URL.
+
+
+
+## report &lt;id&gt;
+
+Read an owned saved report from the configured service.
+
+
+
+## usage
+
+Read your managed workspace scan allowance.
+
+
+
 ## scan [path]
 
 Scan a lockfile (default package-lock.json). Only supplied text and exact dependency advisories are checked.

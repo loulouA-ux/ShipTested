@@ -127,3 +127,59 @@ export async function queryOsv(dependencies:Dependency[],fetcher:typeof fetch=fe
  for(let i=0;i<dependencies.length;i+=100){opts.signal?.throwIfAborted();findings.push(...await queryBatch(dependencies.slice(i,i+100),safe,opts));if(new Set(findings.flatMap(f=>f.evidence.map(e=>e.url))).size>12)throw Error('OSV advisory budget exceeded; narrow the manifest.');}
  return findings;
 }
+
+export type OsvEvidence = {
+ findings:Finding[]; complete:boolean; queriedDependencies:number; totalDependencies:number;
+ matchedAdvisories:number; retrievedAdvisories:number; issues:string[];
+};
+/** Partial evidence is useful, but must never be represented as complete coverage.
+ * Bounded to 5,000 packages, 200 distinct detail requests and 2,000 findings.
+ * The strict queryOsv API remains available to callers requiring all-or-nothing evidence.
+ */
+export async function queryOsvEvidence(dependencies:Dependency[],fetcher:typeof fetch=fetch,opts:OsvOptions={}):Promise<OsvEvidence>{
+ if(dependencies.length>5000)throw Error('OSV package limit exceeded.');
+ const safe=checkedFetch(opts,fetcher),issues=new Set<string>(),findings:Finding[]=[];
+ const attempted=new Set<string>(),matched=new Set<string>();
+ const details=new Map<string,Awaited<ReturnType<typeof getAdvisory>>>();
+ let queriedDependencies=0;
+ for(let offset=0;offset<dependencies.length;offset+=100){
+  if(opts.signal?.aborted){issues.add('deadline');break;}
+  const batchDependencies=dependencies.slice(offset,offset+100);
+  let results:{vulns?:{id:string}[];next_page_token?:string}[];
+  try{
+   const batch=z.object({results:z.array(z.object({vulns:z.array(z.object({id:z.string().regex(/^[A-Za-z0-9._-]{1,160}$/)})).optional(),next_page_token:z.string().optional()}))}).parse(await boundedJson('https://api.osv.dev/v1/querybatch',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({queries:batchDependencies.map(d=>({package:{name:d.name,ecosystem:d.ecosystem},version:d.version}))})
+   },safe));
+   if(batch.results.length!==batchDependencies.length){issues.add('query_response_mismatch');continue;}
+   results=batch.results;queriedDependencies+=batchDependencies.length;
+  }catch{issues.add(opts.signal?.aborted?'deadline':'package_lookup_failed');continue;}
+  if(results.some(r=>r.next_page_token))issues.add('pagination');
+  const ids=[...new Set(results.flatMap(r=>r.vulns?.map(v=>v.id)??[]))];
+  for(const id of ids)matched.add(id);
+  const pending=ids.filter(id=>!attempted.has(id));
+  const selected=pending.slice(0,Math.max(0,200-attempted.size));
+  if(selected.length<pending.length)issues.add('advisory_limit');
+  for(let i=0;i<selected.length;i+=3){
+   if(opts.signal?.aborted){issues.add('deadline');break;}
+   await Promise.all(selected.slice(i,i+3).map(async id=>{
+    attempted.add(id);
+    try{details.set(id,await getAdvisory(id,{...opts,fetcher:safe}));}
+    catch{issues.add(opts.signal?.aborted?'deadline':'advisory_lookup_failed');}
+   }));
+  }
+  results.forEach((r,i)=>{
+   for(const v of r.vulns??[]){
+    const evidence=details.get(v.id);if(!evidence)continue;
+    const a=evidence.advisory;if(a.withdrawn)continue;
+    if(findings.length>=2000){issues.add('finding_limit');break;}
+    const d=batchDependencies[i];
+    findings.push({id:`${a.id}:${d.name}@${d.version}`,title:maskSecrets(a.summary??a.id),...advisoryMetadata(a,d),
+     description:`OSV reports ${d.name}@${d.version} as affected. Application-level exploitability has not been checked; severity comes only from advisory metadata.`,
+     action:'Read the advisory, identify a supported fixed version, update the lockfile and test the application. No changes have been applied.',
+     evidence:[{kind:'advisory',dependency:{...d},location:`${d.path} · ${d.name}@${d.version}`,excerpt:maskSecrets((a.details??'See the linked advisory.').slice(0,1800)),url:`https://osv.dev/vulnerability/${a.id}`,retrievedAt:evidence.retrievedAt}]
+    });
+   }
+  });
+ }
+ return {findings,complete:issues.size===0&&queriedDependencies===dependencies.length,queriedDependencies,totalDependencies:dependencies.length,matchedAdvisories:matched.size,retrievedAdvisories:details.size,issues:[...issues]};
+}

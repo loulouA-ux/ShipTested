@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import {hostedTransport} from './transport.js';
 import {open,writeFile} from 'node:fs/promises';
 import {basename} from 'node:path';
 import {spawn} from 'node:child_process';
 import {scan,getAdvisory,maskSecrets} from '@heysalad/shiptested';
 import {HostedClient} from '@heysalad/shiptested/hosted';
+import {batchCommand,BatchHttpError,BatchTransportError} from './batch.js';
 import {help,version} from './commands.js';
 import {exitCode,sarif,type Threshold} from './output.js';
 class UsageError extends Error {}
@@ -19,9 +21,13 @@ async function main(args:string[]):Promise<number>{
  if(args.length===0||args[0]==='--help'){process.stdout.write(help());return 0;}
  if(args[0]==='--version'){process.stdout.write(version+'\n');return 0;}
  const [command,...rest]=args;
+ if(command==='batch'){
+  try{process.stdout.write(JSON.stringify(await batchCommand(rest),null,2)+'\n');return 0;}
+  catch(error){if(error instanceof BatchHttpError||error instanceof BatchTransportError)throw new UsageError(error.message);throw new UsageError('Batch stopped. Check input, plan lock, credentials, service access and allowance. Progress is saved; resume with the same plan, never recreate it after submission.');}
+ }
  if(['repo','job','report','usage'].includes(command)){
   if(!process.env.SHIPTESTED_API_ORIGIN||!process.env.SHIPTESTED_API_TOKEN)throw new UsageError('Configure SHIPTESTED_API_ORIGIN and SHIPTESTED_API_TOKEN privately for managed scans.');
-  const client=new HostedClient(process.env.SHIPTESTED_API_ORIGIN,process.env.SHIPTESTED_API_TOKEN);
+  const client=new HostedClient(process.env.SHIPTESTED_API_ORIGIN,process.env.SHIPTESTED_API_TOKEN,hostedTransport(process.env.SHIPTESTED_API_ORIGIN));
   let result;
   try {
    if(command==='repo'){

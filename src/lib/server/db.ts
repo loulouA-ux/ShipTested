@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { localDatabase } from "./local-database";
 export type Row = Record<string, unknown>;
 export type QueryOptions = {serializable?:boolean};
 export type Query = (text: string, params?: unknown[], options?:QueryOptions) => Promise<Row[]>;
@@ -15,6 +16,7 @@ export async function retrySerializable<T>(run:()=>Promise<T>):Promise<T>{
 export function database(): Query {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Database is not configured.");
+  if (process.env.SHIPTESTED_LOCAL_POSTGRES === '1') return localDatabase(url);
   const sql = neon(url);
   return async (text, params = [],options={}) => {
     if(options.serializable)return retrySerializable(async()=>{

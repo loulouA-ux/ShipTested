@@ -6,12 +6,15 @@ import {ApiError} from "./http";
 import {Store,type Actor} from "./store";
 import {getRepair} from "./repairs";
 import {githubRequest,installationToken,listRepositories,type RepositorySnapshot} from "./github-repositories";
-import {contentHash,structuredHash,type RepairPlan} from "../repair/plan";
+import {contentHash,structuredHash,rejectDeprecatedTarget,type RepairPlan} from "../repair/plan";
 import {verifyRepair,type RepairRun,type SandboxFactory} from "../repair/runner";
 import {vercelSandboxFactory} from "../repair/sandbox";
+import {matchingDraft} from './matching-draft';
 export function approvalHash(plan:RepairPlan,result:RepairRun){
+ if(!result.artifactChecks?.baseline||!result.artifactChecks.patched)throw new ApiError(409,"Dependency file integrity evidence is required. Prepare and verify a fresh repair.");
  if(!result.scans?.after||result.scans.after.findings.length||result.scans.after.lockfileHash!==contentHash(result.lockfileAfter||""))throw new ApiError(409,"Complete dependency scan evidence is required for approval.");
  if(result.status!=="passed"||!result.cleanupComplete||!result.lockfileAfter||result.planHash!==plan.planHash)throw new ApiError(409,"Repair is not verified for approval.");
+ try{rejectDeprecatedTarget(result.lockfileAfter,plan.packageName);}catch{throw new ApiError(409,"The proposed dependency release is deprecated or invalid. Prepare a fresh repair.");}
  return structuredHash({planHash:plan.planHash,manifest:plan.manifestAfter,lockfile:result.lockfileAfter,result});
 }
 export function repairRunLimits(env:Record<string,string|undefined>=process.env){
@@ -40,21 +43,45 @@ export async function executeRepair(query:Query,actor:Actor,id:string,factory?:S
  if(!claimed)throw new ApiError(409,"Repair has already started.");
  try{
   const result=await verifyRepair(plan,snapshot.files,make,fetcher);
-  await auditRepairMutation(query,actor,id,result.status==="passed"?"verification_passed":"verification_failed","UPDATE sc_repairs SET state=$2,result=$3::jsonb,updated_at=now() WHERE id=$1 RETURNING id",[id,result.status==="passed"?"verified":"failed",JSON.stringify(result)],{evidenceHash:structuredHash(result),cleanupComplete:result.cleanupComplete});
+  const saved=await auditRepairMutation(query,actor,id,result.status==="passed"?"verification_passed":"verification_failed","UPDATE sc_repairs SET state=$2,result=$3::jsonb,updated_at=now() WHERE id=$1 AND owner_id=$4 AND workspace_id=$5 AND state='running' RETURNING id",[id,result.status==="passed"?"verified":"failed",JSON.stringify(result),actor.id,actor.workspaceId],{evidenceHash:structuredHash(result),cleanupComplete:result.cleanupComplete});
+  if(!saved.length)throw new ApiError(409,"Verification state changed. Inspect the saved repair; no execution will be repeated.");
   return {id,state:result.status==="passed"?"verified":"failed",result,approvalHash:result.status==="passed"?approvalHash(plan,result):null};
- }catch{
-  await auditRepairMutation(query,actor,id,"verification_failed","UPDATE sc_repairs SET state='failed',updated_at=now() WHERE id=$1 RETURNING id",[id],{reasonCode:"execution_failed"});
+ }catch(error){
+  await auditRepairMutation(query,actor,id,"verification_failed","UPDATE sc_repairs SET state='failed',updated_at=now() WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='running' RETURNING id",[id,actor.id,actor.workspaceId],{reasonCode:"execution_failed"});
+  if(error instanceof ApiError)throw error;
   throw new ApiError(502,"Repair execution failed. Review evidence before retrying.");
  }
 }
+export const interruptedRepairDelayMs=15*60*1000;
+export function canRecoverRepair(row:{state?:unknown;updated_at?:unknown},now=Date.now()){
+ return row.state==='running'&&typeof row.updated_at!=='undefined'&&now-new Date(String(row.updated_at)).getTime()>=interruptedRepairDelayMs;
+}
+/** Record an abandoned request without repeating paid work or claiming cleanup. */
+export async function recoverInterruptedRepair(query:Query,actor:Actor,id:string){
+ const row=await getRepair(query,actor,id);
+ if(!canRecoverRepair(row))throw new ApiError(409,"Only verification stalled for at least 15 minutes can be recorded as interrupted.");
+ const previous=row.result as Partial<RepairRun>|null;
+ const result:RepairRun={...previous,planHash:(row.plan as RepairPlan).planHash,status:'incomplete',baseline:previous?.baseline||[],patched:previous?.patched||[],cleanupComplete:false,errors:[...(previous?.errors||[]),'Verification was interrupted. Inspect provider compute and cleanup before preparing a fresh proposal.']};
+ const saved=await auditRepairMutation(query,actor,id,'verification_failed',"UPDATE sc_repairs SET state='failed',result=$4::jsonb,updated_at=now() WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='running' AND updated_at<=now()-interval '15 minutes' RETURNING id",[id,actor.id,actor.workspaceId,JSON.stringify(result)],{reasonCode:'worker_interrupted',cleanupComplete:false});
+ if(!saved.length)throw new ApiError(409,"Repair state changed. Reload the saved evidence.");
+ return {id,state:'failed',result};
+}
 const shaSchema=z.object({sha:z.string().regex(/^[a-f0-9]{40}$/)});
-export async function publishRepair(query:Query,actor:Actor,id:string,approvedHash:string,fetcher:typeof fetch=fetch){
+export async function publishRepair(query:Query,actor:Actor,id:string,approvedHash:string,fetcher:typeof fetch=fetch,expectedExistingDraft?:string){
  const row=await getRepair(query,actor,id),plan=row.plan as RepairPlan,result=row.result as RepairRun,snapshot=row.snapshot as RepositorySnapshot;
  if(row.state!=="verified"||!result||approvalHash(plan,result)!==approvedHash)throw new ApiError(409,"Approve the current verified patch before creating a PR.");
  if(!(await listRepositories(actor,fetcher)).some(r=>r.id===snapshot.repository.id))throw new ApiError(403,"Repository access was revoked.");
- const token=await installationToken(actor,snapshot.repository.id,true,fetcher),base=`/repos/${snapshot.repository.full_name}`;
- const head=shaSchema.parse(await githubRequest(`${base}/commits/${encodeURIComponent(snapshot.repository.default_branch)}`,token,{},fetcher));
+ const readToken=await installationToken(actor,snapshot.repository.id,false,fetcher,true),base=`/repos/${snapshot.repository.full_name}`;
+ const head=shaSchema.parse(await githubRequest(`${base}/commits/${encodeURIComponent(snapshot.repository.default_branch)}`,readToken,{},fetcher));
  if(head.sha!==plan.baseCommit)throw new ApiError(409,"Base branch changed. Propose and verify a fresh repair.");
+ const existing=await matchingDraft(snapshot,plan,result.lockfileAfter!,readToken,fetcher);
+ if(expectedExistingDraft&&existing?.html_url!==expectedExistingDraft)throw new ApiError(409,'The expected matching draft is unavailable. No new pull request was created.');
+ if(existing){
+  const saved=await auditRepairMutation(query,actor,id,'patch_approved',"UPDATE sc_repairs SET state='published',pr_url=$4,publication_commit=$5,updated_at=now() WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='verified' RETURNING id",[id,actor.id,actor.workspaceId,existing.html_url,existing.head.sha],{approvalHash:approvedHash,planHash:plan.planHash,baseCommit:plan.baseCommit,existingDraft:true,url:existing.html_url,commit:existing.head.sha});
+  if(!saved.length)throw new ApiError(409,'Repair state changed. Reload its saved evidence.');
+  return {id,state:'published',url:existing.html_url,reused:true};
+ }
+ const token=await installationToken(actor,snapshot.repository.id,true,fetcher);
  const [claimed]=await auditRepairMutation(query,actor,id,"patch_approved","UPDATE sc_repairs SET state='publishing',updated_at=now() WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='verified' RETURNING id",[id,actor.id,actor.workspaceId],{approvalHash:approvedHash,planHash:plan.planHash,baseCommit:plan.baseCommit});
  if(!claimed)throw new ApiError(409,"PR handoff already started.");
  // Keep publishing state on unknown outcome. Never blindly retry writes or create duplicate PRs.

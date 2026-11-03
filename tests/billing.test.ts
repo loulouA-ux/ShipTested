@@ -7,7 +7,7 @@ import {provisionPersonalWorkspace} from '../src/lib/server/workspaces';
 import {billingConfig} from '../src/lib/server/billing';
 const db=new PGlite();const query:Query=async(sql,p=[])=>(await db.query(sql,p)).rows as Record<string,unknown>[];
 const store=new BillingStore(query),owner={id:'github:1',workspaceId:'github:1',role:'member' as const};
-beforeAll(async()=>{for(const f of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','005_billing','007_api_tokens','008_repository_connections'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
+beforeAll(async()=>{for(const f of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','005_billing','007_api_tokens','008_repository_connections','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
 beforeEach(async()=>{await db.exec('TRUNCATE sc_workspaces CASCADE; DELETE FROM sc_scan_allowances; DELETE FROM sc_billing_events; DELETE FROM sc_sessions;');await provisionPersonalWorkspace(query,'1');await store.account(owner);await query("UPDATE sc_billing_accounts SET customer_id='cus_fixture' WHERE workspace_id=$1",[owner.workspaceId]);});
 afterAll(()=>db.close());afterEach(()=>vi.unstubAllEnvs());
 it('refuses live keys unless explicitly activated and validates server configuration',()=>{

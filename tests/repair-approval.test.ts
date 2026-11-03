@@ -8,17 +8,26 @@ vi.mock("../src/lib/server/github-repositories",()=>({githubRequest:github.reque
 const actor={id:"github:123",workspaceId:"github:123",role:"member" as const};
 const plan={planHash:"a".repeat(64),manifestAfter:'{"dependencies":{"lodash":"4.17.21"}}',baseCommit:"b".repeat(40),packageName:"lodash",fromVersion:"4.17.20",toVersion:"4.17.21",sourceUrls:["https://osv.dev/vulnerability/GHSA-test"]} as RepairPlan;
 const scan={checkedAt:"2026-10-25T21:00:00Z",dependencyCount:1,lockfileHash:contentHash('{"lockfileVersion":3}'),findings:[]};
-const result:RepairRun={scans:{before:scan,after:scan},planHash:plan.planHash,status:"passed",cleanupComplete:true,baseline:[],patched:[],errors:[],lockfileAfter:'{"lockfileVersion":3}'};
+const result:RepairRun={artifactChecks:{baseline:true,patched:true},scans:{before:scan,after:scan},planHash:plan.planHash,status:"passed",cleanupComplete:true,baseline:[],patched:[],errors:[],lockfileAfter:'{"lockfileVersion":3}'};
 const row={state:"verified",plan,result,snapshot:{repository:{id:1,full_name:"owner/demo",default_branch:"main"},tree:"c".repeat(40)}};
 const query:Query=async(text)=>text.startsWith("SELECT")?[row]:[{id:"repair"}];
-beforeEach(()=>{vi.clearAllMocks();github.repos.mockResolvedValue([{id:1}]);github.token.mockResolvedValue("test-token");github.request.mockImplementation(async(path:string)=>path.includes("/commits/main")?{sha:plan.baseCommit}:path.endsWith("/pulls")?{html_url:"https://github.com/owner/demo/pull/1"}:{sha:"d".repeat(40)});});
+beforeEach(()=>{vi.clearAllMocks();github.repos.mockResolvedValue([{id:1}]);github.token.mockResolvedValue("test-token");github.request.mockImplementation(async(path:string)=>path.includes("/commits/main")?{sha:plan.baseCommit}:path.includes("/pulls?")?[]:path.endsWith("/pulls")?{html_url:"https://github.com/owner/demo/pull/1"}:{sha:"d".repeat(40)});});
 describe("human approval boundary",()=>{
  it("binds approval to the complete lockfile and command evidence",()=>{const h=approvalHash(plan,result);expect(()=>approvalHash(plan,{...result,lockfileAfter:"changed"})).toThrow("scan evidence");expect(approvalHash(plan,{...result,baseline:[{command:"test",exitCode:0,output:"different"}]})).not.toBe(h);});
  it("preserves exact approval across nested database JSON key reordering",()=>{
   const reordered=JSON.parse(JSON.stringify(result,(_key,value)=>value&&typeof value==="object"&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).reverse()):value));
   expect(approvalHash(plan,reordered)).toBe(approvalHash(plan,result));
  });
+ it("blocks previously verified deprecated targets from approval",()=>{
+  const lockfileAfter=JSON.stringify({packages:{"node_modules/lodash":{version:"4.17.21",deprecated:"Bad release"}}});
+  const withDeprecated={...result,lockfileAfter,scans:{before:scan,after:{...scan,lockfileHash:contentHash(lockfileAfter)}}};
+  expect(()=>approvalHash(plan,withDeprecated)).toThrow("deprecated");
+ });
  it("rejects failed or incomplete verification",()=>{expect(()=>approvalHash(plan,{...result,status:"failed"})).toThrow();expect(()=>approvalHash(plan,{...result,cleanupComplete:false})).toThrow();});
+ it("rejects legacy and changed-file evidence before publication",()=>{
+  expect(()=>approvalHash(plan,{...result,artifactChecks:undefined})).toThrow("integrity evidence");
+  expect(()=>approvalHash(plan,{...result,artifactChecks:{baseline:true,patched:false}})).toThrow("integrity evidence");
+ });
  it("never writes without the exact approval hash",async()=>{await expect(publishRepair(query,actor,"id","wrong")).rejects.toMatchObject({status:409});expect(github.request).not.toHaveBeenCalled();});
  it("does not publish when approval logging fails",async()=>{
   const failing:Query=async(sql)=>{if(sql.startsWith("SELECT"))return [row];throw Error("Audit storage unavailable");};
@@ -33,6 +42,11 @@ describe("human approval boundary",()=>{
   expect(tree.tree.map((e:{path:string})=>e.path)).toEqual(["package.json","package-lock.json"]);
   const pr=JSON.parse(calls.find(c=>c[0].endsWith("/pulls"))![2].body);expect(pr.draft).toBe(true);expect(pr.head).toBe("codex/shipcheck-repair-id");
   expect(calls.some(c=>c[0].includes("/merge"))).toBe(false);
+ });
+ it('refuses new publication when approval was limited to an existing draft',async()=>{
+  await expect(publishRepair(query,actor,'id',approvalHash(plan,result),fetch,'https://github.com/owner/demo/pull/2')).rejects.toMatchObject({status:409});
+  expect(github.request.mock.calls.every(c=>!c[2]?.method||c[2].method==='GET')).toBe(true);
+  expect(github.token.mock.calls.every(c=>c[2]===false)).toBe(true);
  });
 });
 

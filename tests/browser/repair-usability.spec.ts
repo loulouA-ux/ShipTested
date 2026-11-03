@@ -39,3 +39,27 @@ test("finding handoff prefills package but never assumes repository",async({page
  await expect(page.getByLabel("GitHub repository")).toHaveValue("");
  await expect(page.getByRole("button",{name:"Propose repair",exact:true})).toBeDisabled();
 });
+
+test("repository finding handoff prepares the exact target without redundant fields",async({page})=>{
+ const posts:unknown[]=[];
+ await page.route("**/api/repositories",r=>r.fulfill({json:{repositories:[{id:2,full_name:"team/other"},repair.repository]}}));
+ await page.route("**/api/repairs",r=>{if(r.request().method()==="POST"){posts.push(r.request().postDataJSON());return r.fulfill({json:{id}});}return r.fulfill({json:{repairs:[]}});});
+ await page.route(`**/api/repairs/${id}`,r=>r.fulfill({json:{...repair,state:"proposed",result:undefined}}));
+ await page.goto('/repairs?package=lodash&repository=team%2Fdemo&report=22222222-2222-4222-8222-222222222222');
+ await expect(page.getByRole('button',{name:'Prepare repair',exact:true})).toBeEnabled();
+ await expect(page.getByLabel('GitHub repository')).toHaveCount(0);
+ expect(posts).toEqual([]);
+ await page.screenshot({path:'test-results/repair-context-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'test-results/repair-context-mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'Prepare repair',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Run isolated verification'})).toBeVisible();
+ expect(posts).toEqual([{repositoryId:1,packageName:'lodash',sourceReportId:'22222222-2222-4222-8222-222222222222'}]);
+});
+test("unavailable handoff repository never falls back to another connected repository",async({page})=>{
+ await page.route("**/api/repositories",r=>r.fulfill({json:{repositories:[repair.repository]}}));
+ await page.route("**/api/repairs",r=>r.fulfill({json:{repairs:[]}}));
+ await page.goto('/repairs?package=next&repository=team%2Funavailable');
+ await expect(page.getByRole('button',{name:'Prepare repair',exact:true})).toBeDisabled();
+ await expect(page.getByRole('alert').filter({hasText:'not in your connected access list'})).toBeVisible();
+});

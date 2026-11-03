@@ -1,4 +1,5 @@
 export const commands = [
+ {name:'batch plan <repositories.json> <plan.json> | batch submit <plan.json> | batch status <plan.json> | batch dry-run <plan.json>',description:'Plan up to 500 explicit repositories without scanning; submit sequentially with saved retry keys, refresh job/report status, or verify live authorization and allowance without submitting. Keep the same plan when resuming. Exit 0 is not a clean verdict.',options:[]},
  {name:'repo <GitHub URL>',description:'Queue a managed repository scan using SHIPTESTED_API_ORIGIN and SHIPTESTED_API_TOKEN. Returns a job ID; exit 0 means accepted, not security checks passed.',options:['--private','--request-key UUID (reuse when retrying the same submission)']},
  {name:'job <id>',description:'Read a managed scan job and its private report URL.',options:[]},
  {name:'report <id>',description:'Read an owned saved report from the configured service.',options:[]},

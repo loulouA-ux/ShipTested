@@ -15,7 +15,11 @@
     "build:packages": "npm run build -w @heysalad/shiptested && npm run build -w @heysalad/shiptested-cli && npm run build -w @heysalad/shiptested-mcp",
     "prebuild": "npm run build:packages && npm exec -w @shiptested/docs -- fumadocs-mdx",
     "pretypecheck": "npm run build:packages && npm exec -w @shiptested/docs -- fumadocs-mdx",
-    "pretest": "npm run build:packages"
+    "pretest": "npm run build:packages",
+    "local:setup": "node --import tsx scripts/local-runtime.ts setup",
+    "local:serve": "node --import tsx scripts/local-runtime.ts serve",
+    "local:stop": "node --import tsx scripts/local-runtime.ts stop",
+    "test:journey": "playwright test --config playwright.journey.config.ts"
   },
   "dependencies": {
     "@heysalad/shiptested": "0.1.0",
@@ -23,6 +27,7 @@
     "@vercel/sandbox": "3.9.0",
     "lucide-react": "^0.468.0",
     "next": "16.4.2",
+    "pg": "^8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "semver": "^7.7.0",
@@ -34,6 +39,7 @@
     "@electric-sql/pglite": "^0.5.11",
     "@playwright/test": "^1.56.0",
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/semver": "^7.7.0",

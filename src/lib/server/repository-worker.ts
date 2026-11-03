@@ -3,6 +3,7 @@ import { ScanJobs } from './scan-jobs';
 import { fetchManifests } from './repository-manifests';
 import { scanRepository } from './repository-scan';
 import {activeMembership} from './team-access';
+import {ApiError} from './http';
 import {githubMemberAllowed} from './github-session';
 
 async function requireJobOwner(query:Query,workspaceId:string,ownerId:string){
@@ -21,14 +22,14 @@ export async function runRepositoryJob(query:Query,dependencies={fetchManifests,
   try {
     await requireJobOwner(query,String(job.workspace_id),String(job.owner_id));
     const snapshot=await dependencies.fetchManifests({id:String(job.owner_id),workspaceId:String(job.workspace_id),role:'member'},
-      {repository:String(job.repository),commit:String(job.commit_sha),tree:String(job.tree_sha),private:Boolean(job.private_repository)});
+      {repository:String(job.repository),commit:String(job.commit_sha),tree:String(job.tree_sha),private:Boolean(job.private_repository),authenticatedAccess:Boolean(job.requested_private_access)});
     const report=await dependencies.scanRepository(snapshot,AbortSignal.timeout(180000));
     await requireJobOwner(query,String(job.workspace_id),String(job.owner_id));
     await jobs.saveReport(id,token,report);
     return {processed:true,id,state:'completed',reportId:report.id};
-  } catch {
+  } catch (error) {
     // Do not put provider bodies, tokens or source content into errors or operational logs.
-    try {await jobs.finish(id,token,{failureCode:'scan_failed'});} catch {return {processed:true,id,state:'lease_lost'};}
+    try {await jobs.finish(id,token,{failureCode:error instanceof ApiError&&error.status===422?'unsupported_repository':'scan_failed'});} catch {return {processed:true,id,state:'lease_lost'};}
     return {processed:true,id,state:'failed'};
   }
 }

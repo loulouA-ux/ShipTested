@@ -8,7 +8,7 @@ const db=new PGlite();
 const query:Query=async(sql,params=[]) => (await db.query(sql,params)).rows as Record<string,unknown>[];
 const actor={id:"github:1",workspaceId:"github:1",role:"member" as const};
 beforeAll(async()=>{await db.exec(readFileSync("migrations/001_core.sql","utf8"));
-for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
+for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
 afterAll(()=>db.close());
 describe("saved repair ownership",()=>{
  it("lists only the newest 25 owned workspace summaries without source contents",async()=>{

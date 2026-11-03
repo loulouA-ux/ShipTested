@@ -1,0 +1,44 @@
+name: Live public repository customer journey
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: shiptested_local
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: shiptested_local
+        ports:
+          - 55437:5432
+        options: >-
+          --health-cmd "pg_isready -U shiptested_local -d shiptested_local"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SHIPTESTED_CI_POSTGRES: '1'
+      SHIPTESTED_CI_POSTGRES_PASSWORD: disposable-ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run local:setup
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:journey
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: customer-journey-evidence
+          path: |
+            test-results/journey/
+            test-results/journey-browser/

@@ -8,7 +8,7 @@ const db=new PGlite();
 const query:Query=async(sql,params=[])=>(await db.query(sql,params)).rows as Record<string,unknown>[];
 const owner={id:'github:1',workspaceId:'github:1',role:'member' as const};
 const request=(token:string)=>new Request('https://example.com/api/usage',{headers:{Authorization:`Bearer ${token}`}});
-beforeAll(async()=>{for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','007_api_tokens'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));});
+beforeAll(async()=>{for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','007_api_tokens','009_batch_retry'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));});
 beforeEach(async()=>{await db.exec('TRUNCATE sc_workspaces CASCADE; DELETE FROM sc_sessions; DELETE FROM sc_github_accounts; DELETE FROM sc_scan_allowances;');vi.stubEnv('SHIPTESTED_OPEN_REGISTRATION','1');await createGitHubSession(query,{githubId:'1',login:'owner'});});
 afterAll(()=>db.close());afterEach(()=>vi.unstubAllEnvs());
 it('stores only hashes and enforces read-only scope',async()=>{

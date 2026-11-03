@@ -6,7 +6,7 @@ import { installationToken, listRepositories } from './github-repositories';
 import type { Actor } from './store';
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
-export type RepositorySource = { repository:string; commit:string; tree:string; private:boolean };
+export type RepositorySource = { repository:string; commit:string; tree:string; private:boolean; authenticatedAccess?:boolean };
 export type ManifestSnapshot = RepositorySource & { files:Record<string,string>; omitted:string[] };
 
 export function repositoryName(value:string) {
@@ -18,13 +18,13 @@ export function repositoryName(value:string) {
     name=url.pathname.replace(/^\//,'').replace(/\/$/,'');
   }
   name=name.replace(/\.git$/,'');
-  if(!/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(name))
+  if(['.','..'].includes(name.split('/')[1])||!/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]+$/.test(name))
     throw new ApiError(400,'Use owner/repository or its GitHub URL.');
   return name;
 }
 
-async function api(path:string,token:string|undefined,fetcher:typeof fetch) {
-  return boundedJson('https://api.github.com'+path,{headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'ShipTested',...(token?{Authorization:`Bearer ${token}`}:{})}},fetcher);
+async function api(path:string,token:string|undefined,fetcher:typeof fetch,maxBytes=1_000_000) {
+  return boundedJson('https://api.github.com'+path,{headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'ShipTested',...(token?{Authorization:`Bearer ${token}`}:{})}},fetcher,maxBytes);
 }
 
 /** Public access is explicitly anonymous. Private access must match a server-bound installation. */
@@ -39,8 +39,12 @@ export async function resolveRepository(actor:Actor,value:string,privateAccess=f
   }
   const repo=z.object({full_name:z.string(),default_branch:z.string().min(1),private:z.boolean()}).parse(await api(`/repos/${name}`,token,fetcher));
   if(repositoryName(repo.full_name).toLowerCase()!==name.toLowerCase()||(!privateAccess&&repo.private))throw new ApiError(403,'Repository access mismatch.');
-  const commit=z.object({sha,commit:z.object({tree:z.object({sha})})}).parse(await api(`/repos/${name}/commits/${encodeURIComponent(repo.default_branch)}`,token,fetcher));
-  return {repository:name,commit:commit.sha,tree:commit.commit.tree.sha,private:repo.private};
+  // Git metadata avoids the potentially megabytes of patches in /commits/{ref}.
+  const ref=z.object({ref:z.string(),object:z.object({type:z.literal('commit'),sha})}).parse(await api(`/repos/${name}/git/ref/heads/${encodeURIComponent(repo.default_branch)}`,token,fetcher));
+  if(ref.ref!==`refs/heads/${repo.default_branch}`)throw new ApiError(409,'Repository branch identity changed.');
+  const commit=z.object({sha,tree:z.object({sha})}).parse(await api(`/repos/${name}/git/commits/${ref.object.sha}`,token,fetcher));
+  if(commit.sha!==ref.object.sha)throw new ApiError(409,'Repository commit identity changed.');
+  return {repository:name,commit:commit.sha,tree:commit.tree.sha,private:repo.private};
 }
 
 export async function fetchManifests(actor:Actor,source:RepositorySource,fetcher:typeof fetch=fetch):Promise<ManifestSnapshot> {
@@ -48,15 +52,15 @@ export async function fetchManifests(actor:Actor,source:RepositorySource,fetcher
   fetcher=((url,init)=>transport(url,{...init,signal:AbortSignal.any([deadline,...(init?.signal?[init.signal]:[])])})) as typeof fetch;
   const name=repositoryName(source.repository);sha.parse(source.commit);sha.parse(source.tree);
   let token:string|undefined;
-  if(source.private) {
+  if(source.private||source.authenticatedAccess) {
     const repo=(await listRepositories(actor,fetcher)).find(r=>r.full_name.toLowerCase()===name.toLowerCase());
     if(!repo)throw new ApiError(404,'Repository access was revoked.');
     token=await installationToken(actor,repo.id,false,fetcher);
   }
   // Verify the tree belongs to the pinned commit, including on resumed worker runs.
-  const commit=z.object({sha,commit:z.object({tree:z.object({sha})})}).parse(await api(`/repos/${name}/commits/${source.commit}`,token,fetcher));
-  if(commit.sha!==source.commit||commit.commit.tree.sha!==source.tree)throw new ApiError(409,'Pinned repository identity changed.');
-  const tree=z.object({truncated:z.boolean(),tree:z.array(z.object({path:z.string(),type:z.string(),mode:z.string(),sha,size:z.number().int().nonnegative().optional()}))}).parse(await api(`/repos/${name}/git/trees/${source.tree}?recursive=1`,token,fetcher));
+  const commit=z.object({sha,tree:z.object({sha})}).parse(await api(`/repos/${name}/git/commits/${source.commit}`,token,fetcher));
+  if(commit.sha!==source.commit||commit.tree.sha!==source.tree)throw new ApiError(409,'Pinned repository identity changed.');
+  const tree=z.object({truncated:z.boolean(),tree:z.array(z.object({path:z.string(),type:z.string(),mode:z.string(),sha,size:z.number().int().nonnegative().optional()}))}).parse(await api(`/repos/${name}/git/trees/${source.tree}?recursive=1`,token,fetcher,8_000_000));
   if(tree.truncated||tree.tree.length>10000)throw new ApiError(422,'Repository tree exceeds discovery limits; no complete scan is implied.');
   const files:Record<string,string>={},omitted:string[]=[];
   const supported=tree.tree.filter(e=>/(^|\/)(package-lock\.json|package\.json|requirements\.txt)$/.test(e.path));
