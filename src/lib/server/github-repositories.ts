@@ -20,9 +20,12 @@ function appJwt(){
  const value=[{alg:"RS256",typ:"JWT"},{iat:now-60,exp:now+540,iss:id}].map(v=>Buffer.from(JSON.stringify(v)).toString("base64url")).join(".");
  return value+"."+createSign("RSA-SHA256").update(value).sign(key,"base64url");
 }
-export async function githubRequest(path:string,token:string,init:RequestInit={},fetcher:typeof fetch=fetch){
+export class GitHubRequestError extends Error {constructor(public status:number){super('GitHub request failed.');}}
+export async function githubRequest(path:string,token:string,init:RequestInit={},fetcher:typeof fetch=fetch,apiVersion='2022-11-28'){
  if(!path.startsWith("/")||path.startsWith("//")||path.includes("\\"))throw Error("Invalid GitHub API path.");
- return boundedJson("https://api.github.com"+path,{...init,headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"ShipTested","Content-Type":"application/json",Authorization:`Bearer ${token}`}},fetcher);
+ let status:number|undefined;
+ try{return await boundedJson("https://api.github.com"+path,{...init,headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":apiVersion,"User-Agent":"ShipTested","Content-Type":"application/json",Authorization:`Bearer ${token}`}},async(input,options)=>{const response=await fetcher(input,options);status=response.status;return response;});}
+ catch(error){if(status!==undefined&&(status<200||status>=300))throw new GitHubRequestError(status);throw error;}
 }
 export async function installationToken(actor:Actor,repositoryId?:number,write=false,fetcher:typeof fetch=fetch,readPullRequests=false,selectedInstallationId?:number){
  if(write&&!repositoryId)throw Error("Write access must be scoped to one repository.");

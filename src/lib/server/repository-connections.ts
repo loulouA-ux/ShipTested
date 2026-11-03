@@ -55,6 +55,15 @@ async function connection(q:Query,actor:Actor){
  if(!row)throw new ApiError(403,'Connect or renew GitHub repository access in Workspace settings.');
  return {token:decrypt(String(row.encrypted_token),actor),expiresAt:row.expires_at,installationId:row.installation_id===null?null:Number(row.installation_id)};
 }
+/** Merge as the connected human, never with an installation token or admin grant. */
+export async function repositoryMergeToken(q:Query,actor:Actor,repositoryId:number,fetcher:typeof fetch=fetch){
+ const grant=await authorizedRepositoryGrant(q,actor,fetcher,repositoryId);
+ if(!grant.writableRepositoryIds.includes(repositoryId))throw new ApiError(403,'Your GitHub account cannot merge changes in this repository.');
+ const c=await connection(q,actor);
+ const identity=z.object({id:z.number().int().positive().safe()}).parse(await githubRequest('/user',c.token,{},fetcher));
+ if(actor.id!==`github:${identity.id}`)throw new ApiError(403,'Reconnect the same GitHub account before merging.');
+ return c.token;
+}
 const installation=z.object({id:z.number().int().positive().safe(),app_id:z.number().int().positive().safe(),account:z.object({login:z.string().max(100)}),suspended_at:z.string().nullable()});
 async function userInstallations(token:string,fetcher:typeof fetch){
  const result=z.object({total_count:z.number().int().nonnegative(),installations:z.array(installation)}).parse(await githubRequest('/user/installations?per_page=100',token,{},fetcher));

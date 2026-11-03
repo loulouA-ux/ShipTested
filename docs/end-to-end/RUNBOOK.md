@@ -46,6 +46,8 @@ The manual GitHub Actions workflow `customer-journey.yml` runs the same journey 
 
 ## Actual GitHub App and sandbox acceptance
 
+Separately approved repair merging is documented in [MERGE-ACCEPTANCE.md](MERGE-ACCEPTANCE.md). It is disabled by default, uses the connected human's GitHub token, requires fresh readiness and a distinct merge approval, and never treats publication or a pending request as a completed merge. Apply migration 013 before enabling it. No live merge is established by the earlier draft handoff acceptance.
+
 `scripts/provider-acceptance.ts prepare` uses an existing selected-repository App grant and live OSV to prepare a report-bound proposal in the local database. It accepts only the two existing synthetic fixture repositories. It creates no remote branch/PR and executes no source code.
 
 Load provider settings from an ignored private environment file, followed by `.private/local-runtime/runtime.env` so database writes stay local. Set `SHIPTESTED_ACCEPTANCE_ACTOR` to the existing admitted GitHub actor and `SHIPTESTED_ACCEPTANCE_REPOSITORY` to an already-authorized fixture. No installation or permission is expanded by the script.

@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 import type {Query} from "./db";
 import type {Actor} from "./store";
-export type RepairAuditEvent="proposal_created"|"verification_started"|"verification_passed"|"verification_failed"|"patch_approved"|"publication_commit_created"|"draft_pr_created"|"draft_pr_reconciled";
+export type RepairAuditEvent="proposal_created"|"verification_started"|"verification_passed"|"verification_failed"|"patch_approved"|"publication_commit_created"|"draft_pr_created"|"draft_pr_reconciled"|"merge_approved"|"merge_requested"|"merge_uncertain"|"merge_failed"|"merge_confirmed";
 // The state mutation and its event either both commit or both roll back.
 // Callers supply only explicit hashes, IDs, states and counts; never raw source,
 // provider errors, tokens or headers. No update/delete API is exposed for events.

@@ -6,7 +6,7 @@ import * as dbModule from '../src/lib/server/db';
 import {installationToken} from '../src/lib/server/github-repositories';
 import type {Query} from '../src/lib/server/db';
 import {createGitHubSession} from '../src/lib/server/github-session';
-import {beginRepositoryConnection,completeRepositoryConnection,connectionStatus,selectInstallation,authorizedRepositoryGrant,authorizedRepositoryGrants,removeInstallation,disconnectRepositories} from '../src/lib/server/repository-connections';
+import {beginRepositoryConnection,completeRepositoryConnection,connectionStatus,selectInstallation,authorizedRepositoryGrant,authorizedRepositoryGrants,removeInstallation,disconnectRepositories,repositoryMergeToken} from '../src/lib/server/repository-connections';
 const db=new PGlite();const q:Query=async(sql,params=[])=>(await db.query(sql,params)).rows as Record<string,unknown>[];
 const actor={id:'github:1',workspaceId:'github:1',role:'member' as const};
 let removed=false,identity=1;
@@ -53,6 +53,21 @@ it('rejects expired connections and ciphertext copied to another account',async(
  await expect(connectionStatus(q,other.actor,fetcher)).rejects.toMatchObject({status:401});
 });
 async function queryExpiry(){await q("UPDATE sc_repository_connections SET expires_at=now()-interval '1 second'");}
+
+it('merges only with the current human token after rechecking user identity and writable repository access',async()=>{
+ await connect();await selectInstallation(q,actor,12,fetcher);
+ const writable:typeof fetch=async(input,init)=>{
+  if(new URL(String(input)).pathname==='/user/installations/12/repositories')return Response.json({total_count:1,repositories:[{id:123,permissions:{push:true}}]});
+  return fetcher(input,init);
+ };
+ expect(await repositoryMergeToken(q,actor,123,writable)).toBe('private-synthetic-user-token');
+ await expect(repositoryMergeToken(q,{...actor,id:'peter'},123,writable)).rejects.toMatchObject({status:403});
+ await expect(repositoryMergeToken(q,actor,123,fetcher)).rejects.toMatchObject({status:403});
+ identity=2;await expect(repositoryMergeToken(q,actor,123,writable)).rejects.toMatchObject({status:403});identity=1;
+ removed=true;await expect(repositoryMergeToken(q,actor,123,writable)).rejects.toMatchObject({status:403});removed=false;
+ await q('DELETE FROM sc_workspace_members WHERE workspace_id=$1',[actor.workspaceId]);
+ await expect(repositoryMergeToken(q,actor,123,writable)).rejects.toMatchObject({status:403});
+});
 
 it('mints an installation token restricted to the intersection of user and app repository access',async()=>{
  await connect();await selectInstallation(q,actor,12,fetcher);
