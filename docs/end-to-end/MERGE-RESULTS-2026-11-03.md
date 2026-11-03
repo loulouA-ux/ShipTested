@@ -4,18 +4,18 @@ The separately approved merge workflow is implemented in source and disabled by 
 
 | Criterion | Observation | Result |
 | --- | --- | --- |
-| Regression checks | `npm test`: 536 tests in 72 files; `npm run test:e2e`: 122 browser checks | Passed |
+| Regression checks | `npm test`: 539 tests in 72 files; `npm run test:e2e`: 122 browser checks | Passed |
 | Build/static checks | `npm run build`; `npm run typecheck`; `git diff --check` | Passed |
 | New merge browser flow | 8 checks for explicit approval, double-click protection, pending reload, uncertain recovery, blockers, feature-off state and theme/viewport variants | Passed |
 | Mobile/desktop accessibility | axe on merge controls, no horizontal overflow; dark/light at 390px and 1280px | Passed; screenshots retained locally |
 | Exact patch and actor boundaries | Database/provider contract tests reject changed head/base/target/files/commit ancestry, missing approval, other owners/workspaces, lost write access and missing user connection | Passed |
 | Current checks/reviews | Pending/failing/absent/incomplete checks, unknown mergeability, draft state, requested changes and unsupported repository settings block submission | Passed with provider fixtures |
-| Duplicate/racing requests | Two concurrent approvals produce one merge write; stale reconciliation cannot overwrite a new attempt | Passed against PGlite transactions and synthetic provider transport |
+| Duplicate/racing requests | Two concurrent approvals produce one merge write; consumed/expired or pre-rejection tickets cannot replay it; stale reconciliation cannot overwrite a new attempt | Passed against PGlite transactions and synthetic provider transport |
 | Async outcomes | Pending, merged, failed and uncertain remain distinct; timeout/conflict/error never automatically repeats a write | Passed with official API response shapes in fixtures |
 | Accepted write followed by read failure | A 403 while confirming an accepted merge remains uncertain; it is not eligible for safe retry | Passed |
 | Real HTTP boundary | Local Next.js/PostgreSQL/operator session: eight expected 400/401/403/404 denials, including cross-origin, another owner and missing explicit confirmation | Passed |
 | Real GitHub read contract | Existing private fixture draft #1, head `72bff84011c6697d51660de71b4aaf84a69937e2`; 11 API reads, 0 remote writes | Correctly blocked: draft and no passing GitHub checks |
-| Local schema | Applied migration 013 through isolated runtime setup; read-only readiness confirmed required tables | Passed locally; hosted schema unchanged |
+| Local schema | Applied migrations 013 and 014 through isolated runtime setup; read-only readiness confirmed required tables | Passed locally; hosted schema unchanged |
 | Actual customer App merge authorization | Current human token path is covered by encrypted connection, identity, membership, selected-repository and permission tests | Live provider acceptance not performed |
 | Actual GitHub merge | Existing fixture is not eligible; no write approval requested or consumed | Not performed |
 
@@ -30,3 +30,5 @@ Evidence remains in ignored `test-results/merge/` and `/tmp/shiptested-merge-*.l
 The implementation sends an exact head SHA and explicitly disables GitHub rule bypass. A base read is point-in-time; GitHub's merge API does not offer an atomic expected-base parameter. Repository protections are evaluated by GitHub at execution. Queue-required and stacked workflows remain outside the supported direct-squash path.
 
 Before enabling: review/apply the schema in the target development environment, verify existing customer App permissions without widening grants silently, and prepare an eligible synthetic PR with genuine passing CI/reviews. A live fixture merge requires a separate explicit approval of its exact PR/head and deployment consequences. Production activation remains separate.
+
+Final review reproduced replay of a consumed approval after a definitive rejection. A failing regression test established the second write. Single-use, five-minute preview tickets now prevent replay; previews from another tab issued before a rejection also cannot authorize a retry. Fresh readiness after the rejection permits a new explicit approval.

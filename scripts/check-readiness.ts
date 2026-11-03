@@ -14,7 +14,7 @@ if(process.argv.includes('--database')){
   report.database.attempted=true;
   try{
     const q=database();
-    const rows=await q("SELECT to_regclass('sc_scan_jobs') IS NOT NULL AND to_regclass('sc_repairs') IS NOT NULL AND to_regclass('sc_repository_connections') IS NOT NULL AND to_regclass('sc_repository_installations') IS NOT NULL AND to_regclass('sc_repair_merges') IS NOT NULL AS ready");
+    const rows=await q("SELECT to_regclass('sc_scan_jobs') IS NOT NULL AND to_regclass('sc_repairs') IS NOT NULL AND to_regclass('sc_repository_connections') IS NOT NULL AND to_regclass('sc_repository_installations') IS NOT NULL AND to_regclass('sc_repair_merges') IS NOT NULL AND to_regclass('sc_repair_merge_approvals') IS NOT NULL AS ready");
     report.database.reachable=true;report.database.requiredTablesPresent=rows[0]?.ready===true;
   }catch{ /* No raw provider/database diagnostic is logged. */ }
 }

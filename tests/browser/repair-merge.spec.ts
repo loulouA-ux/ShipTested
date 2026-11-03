@@ -35,6 +35,7 @@ test('separate exact-head merge approval survives pending reload and reconciles 
  await expect(panel.getByRole('button',{name:'Check merge readiness',exact:true})).toBeVisible();expect(previews()).toBe(0);expect(actions).toEqual([]);
  await panel.getByRole('button',{name:'Check merge readiness',exact:true}).click();
  const approve=panel.getByRole('button',{name:'Approve and squash merge',exact:true});await expect(approve).toBeDisabled();
+ await expect(panel.getByText('This approval expires after five minutes and can be used once.',{exact:false})).toBeVisible();
  await expect(panel.getByText(head,{exact:true})).toBeVisible();await expect(panel.getByText('main',{exact:true})).toBeVisible();
  await panel.getByRole('checkbox').check();await approve.dblclick();
  await expect(panel.getByText('GitHub accepted the request and is processing it.',{exact:false})).toBeVisible();expect(actions).toEqual(['approve']);

@@ -46,7 +46,7 @@ const fetcher:typeof fetch=async(input,init={})=>{
  if(p===prPath+'/merge-async/'+uuid)return Response.json(pending());
  throw Error('Unexpected GitHub request: '+p);
 };
-beforeAll(async()=>{await db.exec(readFileSync('migrations/001_core.sql','utf8'));await db.exec(readFileSync('migrations/013_repair_merges.sql','utf8'));});
+beforeAll(async()=>{for(const f of ['001_core','013_repair_merges','014_merge_approval_tickets'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
 beforeEach(async()=>{
  vi.clearAllMocks();vi.stubEnv('SHIPTESTED_MERGE_ENABLED','1');vi.stubEnv('SHIPTESTED_CUSTOMER_REPOSITORIES','1');
  credentials.token.mockResolvedValue('synthetic-user-token');
@@ -154,6 +154,24 @@ describe('uncertain merge and read-only reconciliation',()=>{
  it('records an explicit provider rejection and allows only a fresh approved attempt',async()=>{
   writeError=403;await expect(approve()).rejects.toThrow('GitHub rejected');expect((await getRepairMerge(q,actor,id))?.state).toBe('failed');
   const previous=(await getRepairMerge(q,actor,id))!;writeError=null;const next=await approve();expect(next.state).toBe('pending');expect(next.attempt_id).not.toBe(previous.attempt_id);expect(writes).toHaveLength(2);
+ });
+ it('does not replay the same approval after a definitive rejection',async()=>{
+  const ready=await repairMergeReadiness(q,actor,id,fetcher);writeError=403;
+  await expect(approveRepairMerge(q,actor,id,ready.approvalHash!,fetcher)).rejects.toMatchObject({status:502});
+  await expect(approveRepairMerge(q,actor,id,ready.approvalHash!,fetcher)).rejects.toMatchObject({status:409});
+  expect(writes).toHaveLength(1);
+ });
+ it('rotates preview tickets and rejects expired approval without a write',async()=>{
+  const first=await repairMergeReadiness(q,actor,id,fetcher),second=await repairMergeReadiness(q,actor,id,fetcher);
+  expect(first.approvalHash).not.toBe(second.approvalHash);
+  await q("UPDATE sc_repair_merge_approvals SET expires_at=now()-interval '1 second' WHERE repair_id=$1",[id]);
+  await expect(approveRepairMerge(q,actor,id,first.approvalHash!,fetcher)).rejects.toMatchObject({status:409});expect(writes).toHaveLength(0);
+ });
+ it('invalidates other previews issued before a rejection, including another tab',async()=>{
+  const first=await repairMergeReadiness(q,actor,id,fetcher),otherTab=await repairMergeReadiness(q,actor,id,fetcher);writeError=403;
+  await expect(approveRepairMerge(q,actor,id,first.approvalHash!,fetcher)).rejects.toMatchObject({status:502});writeError=null;
+  await expect(approveRepairMerge(q,actor,id,otherTab.approvalHash!,fetcher)).rejects.toMatchObject({status:409});expect(writes).toHaveLength(1);
+  expect((await approve()).state).toBe('pending');expect(writes).toHaveLength(2);
  });
  it('treats confirmation read failure after an accepted write as uncertain, not a safe retry',async()=>{
   const ready=await repairMergeReadiness(q,actor,id,fetcher);writeResult={status:'merged',details:{sha:merged}};

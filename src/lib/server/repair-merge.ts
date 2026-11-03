@@ -93,7 +93,14 @@ export async function repairMergeReadiness(query:Query,actor:Actor,id:string,fet
  const record=await getRepairMerge(query,actor,id);
  if(record&&record.state!=='failed')return {enabled:true,ready:false,method:'squash',reasons:[],record};
  const s=await source(query,actor,id),token=await repositoryMergeToken(query,actor,s.snapshot.repository.id,fetcher);
- return {...await inspectGitHubMerge(s,actor,token,fetcher),record:record??null};
+ const ready=await inspectGitHubMerge(s,actor,token,fetcher);
+ if(!ready.ready||!ready.approvalHash)return {...ready,record:record??null};
+ // Issue a distinct ticket for this preview. It is never a reusable authorization.
+ const ticket=structuredHash({fingerprint:ready.approvalHash,nonce:randomUUID()});
+ await query('DELETE FROM sc_repair_merge_approvals WHERE actor_id=$1 AND workspace_id=$2 AND expires_at<=now()',[actor.id,actor.workspaceId]);
+ const saved=await query("INSERT INTO sc_repair_merge_approvals(approval_hash,repair_id,actor_id,workspace_id,fingerprint) SELECT $4,id,$2,$3,$5 FROM sc_repairs WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='published' AND publication_commit=$6 RETURNING approval_hash",[id,actor.id,actor.workspaceId,ticket,ready.approvalHash,s.head]);
+ if(!saved.length)throw new ApiError(409,'Repair state changed during readiness. Refresh before approving.');
+ return {...ready,approvalHash:ticket,record:record??null};
 }
 export async function repairMergeStatus(q:Query,actor:Actor,id:string):Promise<MergeReadiness>{
  const record=await getRepairMerge(q,actor,id);
@@ -118,12 +125,17 @@ export async function approveRepairMerge(q:Query,actor:Actor,id:string,hash:stri
  if(!mergeEnabled())throw new ApiError(403,'Merging is not enabled here.');
  const s=await source(q,actor,id),token=await repositoryMergeToken(q,actor,s.snapshot.repository.id,fetcher);
  const ready=await inspectGitHubMerge(s,actor,token,fetcher);
- if(!ready.ready||ready.approvalHash!==hash)throw new ApiError(409,ready.reasons.join(' ')||'Approve the current PR head and target before merging.');
+ if(!ready.ready||!ready.approvalHash)throw new ApiError(409,ready.reasons.join(' ')||'Approve the current PR head and target before merging.');
+ // Consume before the state claim; storage failure or a losing claim never
+ // restores a ticket. Refreshing readiness is safe and never repeats a merge.
+ const ticket=await q('UPDATE sc_repair_merge_approvals SET consumed_at=now() WHERE approval_hash=$4 AND repair_id=$1 AND actor_id=$2 AND workspace_id=$3 AND fingerprint=$5 AND consumed_at IS NULL AND expires_at>now() RETURNING approval_hash',[id,actor.id,actor.workspaceId,hash,ready.approvalHash]);
+ if(!ticket.length)throw new ApiError(409,'This merge approval expired or was already used. Refresh readiness and review the current head again.');
  const record:MergeRecord={state:'requesting',attempt_id:randomUUID(),approval_hash:hash,head_sha:s.head,base_sha:s.plan.baseCommit,request_id:null,merge_commit:null};
- const claimed=await auditRepairMutation(q,actor,id,'merge_approved',`INSERT INTO sc_repair_merges(repair_id,actor_id,workspace_id,state,approval_hash,head_sha,base_sha,attempt_id)
- SELECT id,$2,$3,'requesting',$4,$5,$6,$7 FROM sc_repairs WHERE id=$1 AND owner_id=$2 AND workspace_id=$3 AND state='published' AND publication_commit=$5
- ON CONFLICT(repair_id) DO UPDATE SET state='requesting',attempt_id=excluded.attempt_id,approval_hash=excluded.approval_hash,head_sha=excluded.head_sha,base_sha=excluded.base_sha,request_id=NULL,merge_commit=NULL,updated_at=now()
- WHERE sc_repair_merges.state='failed' AND sc_repair_merges.actor_id=$2 AND sc_repair_merges.workspace_id=$3 RETURNING repair_id AS id`,[id,actor.id,actor.workspaceId,hash,s.head,s.plan.baseCommit,record.attempt_id],{attemptId:record.attempt_id,approvalHash:hash,headSha:s.head,baseSha:s.plan.baseCommit,method:'squash'});
+ const claimed=await auditRepairMutation(q,actor,id,'merge_approved',`INSERT INTO sc_repair_merges(repair_id,actor_id,workspace_id,state,approval_hash,head_sha,base_sha,attempt_id,approval_issued_at)
+ SELECT r.id,$2,$3,'requesting',$4,$5,$6,$7,a.created_at FROM sc_repairs r JOIN sc_repair_merge_approvals a ON a.repair_id=r.id AND a.approval_hash=$4 AND a.actor_id=$2 AND a.workspace_id=$3 AND a.consumed_at IS NOT NULL
+ WHERE r.id=$1 AND r.owner_id=$2 AND r.workspace_id=$3 AND r.state='published' AND r.publication_commit=$5
+ ON CONFLICT(repair_id) DO UPDATE SET state='requesting',attempt_id=excluded.attempt_id,approval_hash=excluded.approval_hash,head_sha=excluded.head_sha,base_sha=excluded.base_sha,request_id=NULL,merge_commit=NULL,approval_issued_at=excluded.approval_issued_at,updated_at=now()
+ WHERE sc_repair_merges.state='failed' AND excluded.approval_issued_at>sc_repair_merges.updated_at AND sc_repair_merges.actor_id=$2 AND sc_repair_merges.workspace_id=$3 RETURNING repair_id AS id`,[id,actor.id,actor.workspaceId,hash,s.head,s.plan.baseCommit,record.attempt_id],{attemptId:record.attempt_id,approvalHash:hash,approvalFingerprint:ready.approvalHash,headSha:s.head,baseSha:s.plan.baseCommit,method:'squash'});
  if(!claimed.length)throw new ApiError(409,'A merge attempt already exists. Check its status; do not repeat the merge request.');
  let submitting=true;
  try{

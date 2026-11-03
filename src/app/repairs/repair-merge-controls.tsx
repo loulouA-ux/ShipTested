@@ -52,7 +52,7 @@ export default function RepairMergeControls({id,onSaved}:{id:string;onSaved:()=>
     {!!preview.reasons.length&&<ul>{preview.reasons.map(reason=><li key={reason}>{reason}</li>)}</ul>}
     {!!preview.checks?.length&&<details open><summary>Current GitHub checks</summary><ul>{preview.checks.map((check,i)=><li key={i}>{check.name} · {check.state}</li>)}</ul></details>}
     {preview.ready&&preview.approvalHash&&<>
-     <p>GitHub currently reports this exact PR head as ready. Permissions, patch contents and readiness will be checked again when you approve.</p>
+     <p>GitHub currently reports this exact PR head as ready. Permissions, patch contents and readiness will be checked again when you approve. This approval expires after five minutes and can be used once.</p>
      <label><input type="checkbox" checked={approved} disabled={!!busy} onChange={e=>setApproved(e.target.checked)}/> I approve merging this exact PR head into the target branch and understand it may trigger deployment.</label>
      <p><button className="button primary" disabled={!approved||!!busy} onClick={()=>void run('approve')}><GitMerge size={16} aria-hidden="true" className="action-icon"/>Approve and squash merge</button></p>
     </>}
