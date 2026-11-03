@@ -15,7 +15,7 @@ test('public demo refuses every live API before any external request',async()=>{
   }
  }
  // Includes enqueue/status/cancel repository-scan handlers; all must fail closed.
- expect(checked).toBe(45);expect(fetch).not.toHaveBeenCalled();
+ expect(checked).toBe(47);expect(fetch).not.toHaveBeenCalled();
 });
 test('public proxy allows replay reads and refuses live pages and all writes',()=>{
  vi.stubEnv('SHIPCHECK_PUBLIC_DEMO','1');

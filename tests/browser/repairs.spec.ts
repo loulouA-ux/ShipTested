@@ -25,7 +25,7 @@ test("repair flow requires evidence review and explicit approval before PR reque
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await approve.scrollIntoViewIfNeeded();
  await page.screenshot({path:".private/repair-approval-mobile.png"});
- await approve.click();await expect(page.getByRole("link",{name:"Open draft pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/1");expect(writes).toBe(1);
+ await approve.click();await expect(page.getByRole("link",{name:"Open pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/1");expect(writes).toBe(1);
 });
 test("unconnected member sees actionable error without approving repairs",async({page})=>{
  await page.route("**/api/repairs",r=>r.fulfill({json:{repairs:[]}}));
@@ -43,7 +43,7 @@ test("reopens saved evidence after reload without repeating mutations",async({pa
  await page.route(`**/api/repairs/${base.id}`,r=>{if(r.request().method()!=="GET")writes++;return r.fulfill({json:{...base,state:"published",url:"https://github.com/team/demo/pull/1"}});});
  await page.goto("/repairs");await page.reload();
  await page.getByRole("button",{name:"team/demo · lodash · Draft PR created"}).click();
- await expect(page.getByRole("link",{name:"Open draft pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/1");
+ await expect(page.getByRole("link",{name:"Open pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/1");
  expect(writes).toBe(0);
 });
 
@@ -59,7 +59,7 @@ test("uncertain publication offers reconciliation rather than repeating approval
  await page.goto("/repairs");await page.getByRole("button",{name:"team/demo · lodash · Publication needs reconciliation"}).click();
  await expect(page.getByRole("button",{name:"Approve and create draft PR"})).toHaveCount(0);
  await page.getByRole("button",{name:"Check existing draft PR"}).click();
- await expect(page.getByRole("link",{name:"Open draft pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/2");
+ await expect(page.getByRole("link",{name:"Open pull request"})).toHaveAttribute("href","https://github.com/team/demo/pull/2");
  expect(actions).toEqual(["reconcile"]);
 });
 

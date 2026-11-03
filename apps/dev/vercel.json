@@ -2,7 +2,8 @@
   "ignoreCommand": "node ../../scripts/platform/ignore-build.mjs dev",
   "git": {
     "deploymentEnabled": {
-      "codex/end-to-end-readiness": false
+      "codex/end-to-end-readiness": false,
+      "codex/approved-repair-merge": false
     }
   }
 }
