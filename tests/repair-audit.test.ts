@@ -7,7 +7,7 @@ import {auditRepairMutation,repairAuditEvents} from "../src/lib/server/repair-au
 const db=new PGlite();const query:Query=async(sql,params=[]) => (await db.query(sql,params)).rows as Record<string,unknown>[];
 const actor={id:"github:1",workspaceId:"github:1",role:"member" as const};
 beforeAll(async()=>{await db.exec(readFileSync("migrations/001_core.sql","utf8"));
-for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});afterAll(()=>db.close());
+for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});afterAll(()=>db.close());
 async function proposal(){const id=randomUUID();await auditRepairMutation(query,actor,id,"proposal_created","INSERT INTO sc_repairs(id,owner_id,workspace_id,state,snapshot,plan) VALUES($1,$2,$3,'proposed',$4::jsonb,'{}') RETURNING id",[id,actor.id,actor.workspaceId,JSON.stringify({files:{"private.js":"private source"}})],{planHash:"a".repeat(64)});return id;}
 describe("repair audit trail",()=>{
  it("persists ordered actor/evidence events without source and isolates owners/workspaces",async()=>{

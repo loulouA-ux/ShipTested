@@ -12,6 +12,7 @@ const request = z.object({
   commit: z.string().regex(/^[a-f0-9]{40}$/),
   tree: z.string().regex(/^[a-f0-9]{40}$/),
   private: z.boolean(),
+  privateAccess: z.boolean().optional(),
 }).strict();
 export type JobRequest = z.infer<typeof request>;
 
@@ -27,8 +28,17 @@ export class ScanJobs {
     return row;
   }
 
+  /** A retry retains the originally pinned commit even if the default branch moves. */
+  async submitted(actor:Actor,key:string,repository:string,privateAccess:boolean) {
+    if(!z.string().uuid().safeParse(key).success)throw new ApiError(400,'Invalid request key.');
+    const row=await this.existing(actor,key);
+    if(row&&(String(row.repository).toLowerCase()!==repository.toLowerCase()||row.requested_private_access!==privateAccess))
+      throw new ApiError(409,'This request key belongs to a different scan.');
+    return row;
+  }
+
   private sameRequest(row: Row, input: JobRequest) {
-    if (row.repository !== input.repository || row.commit_sha !== input.commit || row.tree_sha !== input.tree || row.private_repository !== input.private)
+    if (String(row.repository).toLowerCase() !== input.repository.toLowerCase() || row.requested_private_access !== (input.privateAccess??input.private))
       throw new ApiError(409, 'This request key belongs to a different scan.');
     return row;
   }
@@ -45,12 +55,12 @@ export class ScanJobs {
         UPDATE sc_scan_allowances SET reserved=reserved+1
         WHERE workspace_id=$1 AND period_start=(date_trunc('month',now() AT TIME ZONE 'UTC'))::date
         AND reserved < scan_limit RETURNING period_start
-      ), changed AS (INSERT INTO sc_scan_jobs(id,workspace_id,owner_id,request_key,repository,commit_sha,period_start,tree_sha,private_repository)
-        SELECT $3,$1,$2,$4,$5,$6,period_start,$7,$8 FROM allowance RETURNING *), audit AS (
+      ), changed AS (INSERT INTO sc_scan_jobs(id,workspace_id,owner_id,request_key,repository,commit_sha,period_start,tree_sha,private_repository,requested_private_access)
+        SELECT $3,$1,$2,$4,$5,$6,period_start,$7,$8,$9 FROM allowance RETURNING *), audit AS (
         INSERT INTO sc_workspace_events(workspace_id,actor_id,event_type,subject_id)
         SELECT workspace_id,owner_id,'scan_queued',id::text FROM changed
       ) SELECT * FROM changed`,
-      [actor.workspaceId, actor.id, randomUUID(), input.requestKey, input.repository, input.commit,input.tree,input.private]);
+      [actor.workspaceId, actor.id, randomUUID(), input.requestKey, input.repository, input.commit,input.tree,input.private,input.privateAccess??input.private]);
       if (job) return job;
     } catch (error) {
       // Concurrent identical requests can hit the unique key; return the winner.

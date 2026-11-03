@@ -1,6 +1,6 @@
 # Hosted workflow: development and release operations
 
-Status: implementation branch, not an activated hosted service. The public production application remains a recorded demo. Current code forces production demo mode even if `SHIPTESTED_PUBLIC_DEMO=0`; changing that guard is a separate release step, after the acceptance gates in HOSTED-WORKFLOW.md pass.
+Status: implementation branch, not an activated hosted service. The public production application remains a recorded demo. Production defaults to demo mode. The explicit production activation gate additionally requires validated identity, admission, origin and database configuration; changing flags alone does not establish release acceptance. Activation remains a separate reviewed release step.
 
 ## Development setup
 

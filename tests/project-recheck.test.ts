@@ -14,7 +14,7 @@ const query: Query = async (sql, params = []) => (await db.query(sql, params)).r
 const store = new Store(query);
 const actor: Actor = { id: "peter", workspaceId: "shipcheck-team", role: "member" };
 beforeAll(async () => { await db.exec(readFileSync("migrations/001_core.sql", "utf8"));
-for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8')); });
+for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8')); });
 afterAll(() => db.close());
 it("rechecks proof on every scan and denies removed, changed or expired proof despite stored verification", async () => {
   const project = await store.createProject(actor, "Synthetic recheck", "https://proof.example.com");

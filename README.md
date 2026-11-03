@@ -14,6 +14,7 @@ Use **Node 22**. From this repository:
 
 ```sh
 npm ci
+npm run build:packages
 npm run dev
 ```
 
@@ -33,6 +34,20 @@ node packages/cli/dist/index.js scan /path/to/package-lock.json --json
 ```
 
 No dependency installation or repository code execution occurs during the scan. OSV receives package names and versions. Never install the deliberately vulnerable dependencies in a demo fixture.
+
+## Run the local customer journey
+
+For a working local workspace with PostgreSQL, real public GitHub/OSV scans and a sequential worker:
+
+```sh
+npm run local:setup
+npm run build
+npm run local:serve
+```
+
+Open **http://127.0.0.1:3157**. Setup generates two private local operator keys in `.private/local-runtime/access.json`; use the team-key sign-in form. PostgreSQL tools must be installed (`pg_config --bindir`, or set `POSTGRES_BIN`). This loopback runtime keeps its own database and does not load hosted credentials, enable payments or run paid repairs.
+
+`npm run test:journey` starts its own fresh server and checks the actual HTTP/browser journey against that local database and live public GitHub/OSV. Stop `local:serve` first. Tests use two local operator identities; GitHub OAuth, customer App authorization and paid cloud repair are separate acceptance gates. [Runbook and evidence](docs/end-to-end/RUNBOOK.md).
 
 ## Choose your interface
 

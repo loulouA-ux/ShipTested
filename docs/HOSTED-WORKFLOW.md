@@ -211,3 +211,17 @@ External configuration audit: Preview OAuth secret is now configured; Preview st
 
 - Added `repo --request-key UUID` and output of generated request keys before network submission. Operators can retry the same submission across separate CLI processes without creating a new allowance reservation. Duplicate/invalid flags fail before a network call.
 - Built packages and typecheck pass; eight focused CLI/client tests pass, including actual compiled CLI invocations that verify the same request key reaches the transport twice and stdout remains JSON. Existing server idempotency was separately verified against the protected hosted API. No npm publication performed.
+
+### HeySalad batch capacity preparation — 28 October 2026
+
+- Raised only `github:7957943`'s current-month allowance on the isolated acceptance database from 5 to 500. Readback retained one reserved attempt and showed 499 remaining. No new scan was submitted, no billing/seat change was made, and the database expiry was not extended.
+- Local implementation supports five-page/500-repository installation and user-grant listing, with existing authorization checks. Added CLI batch planning, sequential paced submission, durable request-key resume, process locking and job/report status refresh. Migration 009 preserves requested authenticated access and makes retries return the originally pinned job before resolving a moving branch. Public repositories can retain explicitly requested installation authentication in the worker.
+- GitHub CLI inventory found 215 `heysalad-ai` repositories, including 79 private. The existing local GitHub App mapping listed one repository, none under `heysalad-ai`; CLI visibility does not grant the app access. Prepared a private 215-entry plan with zero submissions. No other organization was assumed to belong in scope.
+- Verification: production build and TypeScript passed; full suite passed 350 tests, then a new real-PGlite 350-job allowance boundary test was added and the three-test capacity suite passed. Batch fixture tests exercise 350 submissions, lost responses/restarts and terminal states; pagination tests cover 500 repositories and 501 rejection. This is not proof of live 300-repository throughput.
+- Fresh browser opening for allowance UI confirmation returned `Local browser use is disabled in Work settings`; no alternate browser-control mechanism was used. Database readback is the live allowance evidence.
+- Changes remain local/unpublished. Migration 009 is not applied to the hosted database, and no new worker or deployment was activated. Prior restrictions on deployment and repository-permission changes remain respected. See `BATCH-SCANNING.md` for activation requirements, commands and limitations. The disposable database still has the previously scheduled 28 October 23:09 London expiry.
+
+
+### End-to-end development acceptance — 3 November 2026
+
+The supported workflow now has current local PostgreSQL/HTTP/browser evidence, actual identity OAuth and existing selected-repository access, an approved sandbox repair and approved exact-draft reuse. See `docs/end-to-end/VERIFICATION-2026-11-03.md` for commands, counts, source identities, artifacts and limits. Original hosted infrastructure was not migrated or deployed. Earlier checkpoints remain historical; they are not claims of current customer or production readiness.

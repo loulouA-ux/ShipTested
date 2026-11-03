@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { valid, validRange, satisfies, gt, compare } from "semver";
+import { valid, validRange, satisfies, gt, compare, prerelease } from "semver";
 import { z } from "zod";
 import { boundedJson } from "../providers";
 
@@ -22,6 +22,11 @@ export function structuredHash(value:unknown){
     ?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a<b?-1:a>b?1:0)):item));
 }
 export function repairPlanHash(plan:Omit<RepairPlan,"planHash">){return structuredHash(plan);}
+const registryReleaseSchema=z.object({name:z.string(),version:z.string(),deprecated:z.union([z.string(),z.boolean()]).optional()});
+export function rejectDeprecatedTarget(lockfile:string,packageName:string){
+  const target=JSON.parse(lockfile).packages?.[`node_modules/${packageName}`];
+  if(target?.deprecated)throw Error("The proposed dependency release is deprecated. Prepare a fresh repair.");
+}
 const packagePattern=/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 export async function proposeDependencyRepair(input:{baseCommit:string;manifest:string;packageName:string;currentVersion:string;advisoryIds:string[]},fetcher:typeof fetch=fetch):Promise<RepairPlan>{
   if(!/^[a-f0-9]{40}$/.test(input.baseCommit))throw Error("A pinned Git commit is required.");
@@ -52,10 +57,23 @@ export async function proposeDependencyRepair(input:{baseCommit:string;manifest:
   };
   const before=await query(input.currentVersion);
   if(input.advisoryIds.some(id=>!before.includes(id)))throw Error("Selected advisory does not affect the pinned version.");
+  const release=async(version:string)=>{
+    const metadata=registryReleaseSchema.parse(await boundedJson(`https://registry.npmjs.org/${encodeURIComponent(input.packageName)}/${encodeURIComponent(version)}`,{},fetcher));
+    if(metadata.name!==input.packageName||!valid(metadata.version)||(version!=="latest"&&metadata.version!==version))throw Error("Registry metadata does not match the proposed dependency.");
+    return metadata;
+  };
   let target:string|undefined;
   for(const version of [...candidates].sort(compare).slice(0,5)){
+    if(prerelease(version))continue;
+    if((await release(version)).deprecated)continue;
     const after=await query(version);
     if(after.length===0){target=version;break;}
+  }
+  // A fixed-event release may be deprecated. Check one published stable fallback,
+  // still requiring an exact-version OSV lookup rather than trusting the tag.
+  if(!target){
+    const latest=await release("latest");
+    if(!latest.deprecated&&!prerelease(latest.version)&&gt(latest.version,input.currentVersion)&&(await query(latest.version)).length===0)target=latest.version;
   }
   if(!target)throw Error("No verified advisory-free candidate within the repair budget.");
   manifest[section][input.packageName]=target;

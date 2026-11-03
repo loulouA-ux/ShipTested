@@ -1,6 +1,6 @@
 # ShipTested CLI
 
-Source-ready, not yet published. Build workspaces from the repository, then run `node packages/cli/dist/index.js --help`.
+The 0.1.0 release was recorded on 27 October 2026. Hosted/batch additions in this checkout are unreleased; build from source to evaluate them. Build workspaces from the repository, then run `node packages/cli/dist/index.js --help`.
 
 `scan [path=package-lock.json]` supports `--json`, `--sarif <new-file>`, `--fail-on high|medium|low|any`, `--ai`, `--quiet`, `--no-color`. Output never uses ANSI colours. Stages go to stderr; JSON alone goes to stdout. SARIF refuses to overwrite an existing file.
 

@@ -15,7 +15,7 @@ const jobs = new ScanJobs(query);
 const actor: Actor = {id:'peter',workspaceId:'team',role:'member'};
 const input = () => ({requestKey:randomUUID(),repository:'heysalad-ai/nicedeck',commit:'a'.repeat(40),tree:'b'.repeat(40),private:false});
 beforeAll(async () => {
-  for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));
+  for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));
   await query("INSERT INTO sc_workspaces(id,owner_id,name) VALUES('team','peter','Test workspace')");
   await db.exec(readFileSync('migrations/002_hosted_jobs.sql','utf8'));
   await db.exec(readFileSync('migrations/002_hosted_jobs.sql','utf8'));
@@ -37,7 +37,8 @@ it('retries the same request without consuming additional allowance', async () =
   expect(new Set(results.map(r=>r.id)).size).toBe(1);
   expect((await query('SELECT reserved FROM sc_scan_allowances'))[0].reserved).toBe(1);
   expect(await query("SELECT * FROM sc_workspace_events WHERE subject_id=$1 AND event_type='scan_queued'",[results[0].id])).toHaveLength(1);
-  await expect(jobs.enqueue(actor,{...req,commit:'b'.repeat(40)})).rejects.toMatchObject({status:409});
+  expect((await jobs.enqueue(actor,{...req,commit:'b'.repeat(40)})).commit_sha).toBe(req.commit);
+  await expect(jobs.enqueue(actor,{...req,privateAccess:true})).rejects.toMatchObject({status:409});
 });
 it('isolates both owner and workspace and refuses unprovisioned workspaces', async () => {
   const row=await jobs.enqueue(actor,input());
@@ -132,4 +133,30 @@ it('does not fetch code for disabled accounts or persist results after mid-scan 
  };
  expect((await runRepositoryJob(query,{fetchManifests,scanRepository:scanThenRevoke})).state).toBe('failed');
  expect((await jobs.get(session.actor,String(second.id))).report_id).toBeNull();
+});
+
+it('retries the original submission without resolving a moving default branch',async()=>{
+ const req={...input(),privateAccess:true};const row=await jobs.enqueue(actor,req);
+ expect((await jobs.submitted(actor,req.requestKey,req.repository,true))?.id).toBe(row.id);
+ await expect(jobs.submitted(actor,req.requestKey,'other/repository',true)).rejects.toMatchObject({status:409});
+ await expect(jobs.submitted(actor,req.requestKey,req.repository,false)).rejects.toMatchObject({status:409});
+ expect(await jobs.submitted({...actor,id:'other'},req.requestKey,req.repository,true)).toBeUndefined();
+ expect((await query('SELECT reserved FROM sc_scan_allowances'))[0].reserved).toBe(1);
+});
+it('keeps authenticated reads for public repositories when explicitly requested',async()=>{
+ const req={...input(),privateAccess:true};await jobs.enqueue(actor,req);
+ let authenticated=false;
+ await runRepositoryJob(query,{
+  fetchManifests:async(_actor,source)=>{authenticated=source.authenticatedAccess===true;expect(source.private).toBe(false);return {...source,files:{},omitted:[]};},
+  scanRepository,
+ });
+ expect(authenticated).toBe(true);
+});
+it('records bounded discovery rejection as unsupported without storing provider text',async()=>{
+ const {ApiError}=await import('../src/lib/server/http');
+ await jobs.enqueue(actor,input());
+ const scan=vi.fn();
+ await runRepositoryJob(query,{fetchManifests:async()=>{throw new ApiError(422,'Private provider detail must not be stored');},scanRepository:scan});
+ expect(scan).not.toHaveBeenCalled();
+ expect(await query('SELECT state,failure_code FROM sc_scan_jobs')).toEqual([{state:'failed',failure_code:'unsupported_repository'}]);
 });

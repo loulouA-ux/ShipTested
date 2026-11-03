@@ -20,7 +20,7 @@ import type { ScanReport } from './types.js';
 export * from './types.js';
 export { parseManifest } from './parser.js';
 export { maskSecrets, scanFiles, verdict } from './scanner.js';
-export { queryOsv, getAdvisory, MemoryCache, type Cache } from './osv.js';
+export { queryOsv, queryOsvEvidence, getAdvisory, MemoryCache, type Cache, type OsvEvidence } from './osv.js';
 export { advisoryMetadata, groupByPackage } from './advisory-metadata.js';
 export type StageEvent = {
     stage: 'Lockfile' | 'Secrets' | 'OSV';
@@ -32,6 +32,7 @@ export type Report = ScanReport;
 export type ScanOptions = {
     onStage?: (event: StageEvent) => void;
     signal?: AbortSignal;
+    timeoutMs?: number;
     osv?: {
         baseUrl?: string;
         cache?: Cache;

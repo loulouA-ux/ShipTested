@@ -7,7 +7,7 @@ import { saveOAuthTransaction, consumeOAuthTransaction, createGitHubSession } fr
 import { requireActor, revokeSession } from "../src/lib/server/session";
 const db = new PGlite();
 const query: Query = async (s,p=[]) => (await db.query(s,p)).rows as Record<string,unknown>[];
-beforeAll(async()=>{for(const path of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${path}.sql`,'utf8'));});
+beforeAll(async()=>{for(const path of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${path}.sql`,'utf8'));});
 afterAll(()=>db.close()); afterEach(()=>vi.unstubAllEnvs());
 const config={clientId:"test",clientSecret:"test",origin:"https://example.com"};
 describe("GitHub database sessions",()=>{

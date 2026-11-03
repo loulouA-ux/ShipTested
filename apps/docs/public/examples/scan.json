@@ -1,8 +1,8 @@
 {
-  "id": "b09feba3-055a-42cb-8e82-5bc30d74c471",
+  "id": "af40811f-7e70-42df-b416-d78cf83e264f",
   "mode": "live",
-  "createdAt": "2026-10-27T17:51:29.632Z",
-  "durationMs": 865,
+  "createdAt": "2026-11-03T03:03:26.021Z",
+  "durationMs": 1580,
   "dependencies": [
     {
       "name": "lodash",
@@ -34,7 +34,7 @@
           "location": "node_modules/lodash · lodash@4.17.20",
           "excerpt": "`lodash` versions prior to 4.17.21 are vulnerable to Command Injection via the template function.",
           "url": "https://osv.dev/vulnerability/GHSA-35jh-r3h4-6jhm",
-          "retrievedAt": "2026-10-27T17:51:29.430Z"
+          "retrievedAt": "2026-11-03T03:03:25.569Z"
         }
       ]
     },
@@ -60,7 +60,7 @@
           "location": "node_modules/lodash · lodash@4.17.20",
           "excerpt": "### Impact\n\nThe fix for [CVE-2021-23337](https://github.com/advisories/GHSA-35jh-r3h4-6jhm) added validation for the `variable` option in `_.template` but did not apply the same validation to `options.imports` key names. Both paths flow into the same `Function()` constructor sink.\n\nWhen an application passes untrusted input as `options.imports` key names, an attacker can inject default-parameter expressions that execute arbitrary code at template compilation time.\n\nAdditionally, `_.template` uses `assignInWith` to merge imports, which enumerates inherited properties via `for..in`. If `Object.prototype` has been polluted by any other vector, the polluted keys are copied into the imports object and passed to `Function()`.\n\n### Patches\n\nUsers should upgrade to version 4.18.0.\n\nThe fix applies two changes:\n1. Validate `importsKeys` against the existing `reForbiddenIdentifierChars` regex (same check already used for the `variable` option)\n2. Replace `assignInWith` with `assignWith` when merging imports, so only own properties are enumerated\n\n### Workarounds\n\nDo not pass untrusted input as key names in `options.imports`. Only use developer-controlled, static key names.",
           "url": "https://osv.dev/vulnerability/GHSA-r5fr-rjxr-66jc",
-          "retrievedAt": "2026-10-27T17:51:29.632Z"
+          "retrievedAt": "2026-11-03T03:03:25.794Z"
         }
       ]
     },
@@ -86,7 +86,7 @@
           "location": "node_modules/lodash · lodash@4.17.20",
           "excerpt": "All versions of package lodash prior to 4.17.21 are vulnerable to Regular Expression Denial of Service (ReDoS) via the `toNumber`, `trim` and `trimEnd` functions. \n\nSteps to reproduce (provided by reporter Liyuan Chen):\n```js\nvar lo = require('lodash');\n\nfunction build_blank(n) {\n    var ret = \"1\"\n    for (var i = 0; i < n; i++) {\n        ret += \" \"\n    }\n    return ret + \"1\";\n}\nvar s = build_blank(50000) var time0 = Date.now();\nlo.trim(s) \nvar time_cost0 = Date.now() - time0;\nconsole.log(\"time_cost0: \" + time_cost0);\nvar time1 = Date.now();\nlo.toNumber(s) var time_cost1 = Date.now() - time1;\nconsole.log(\"time_cost1: \" + time_cost1);\nvar time2 = Date.now();\nlo.trimEnd(s);\nvar time_cost2 = Date.now() - time2;\nconsole.log(\"time_cost2: \" + time_cost2);\n```",
           "url": "https://osv.dev/vulnerability/GHSA-29mw-wpgm-hmr9",
-          "retrievedAt": "2026-10-27T17:51:29.443Z"
+          "retrievedAt": "2026-11-03T03:03:25.563Z"
         }
       ]
     },
@@ -112,7 +112,7 @@
           "location": "node_modules/lodash · lodash@4.17.20",
           "excerpt": "### Impact\n\nLodash versions 4.17.23 and earlier are vulnerable to prototype pollution in the `_.unset` and `_.omit` functions. The fix for [CVE-2025-13465](https://github.com/lodash/lodash/security/advisories/GHSA-xxjr-mmjv-4gpg) only guards against string key members, so an attacker can bypass the check by passing array-wrapped path segments. This allows deletion of properties from built-in prototypes such as `Object.prototype`, `Number.prototype`, and `String.prototype`.\n\nThe issue permits deletion of prototype properties but does not allow overwriting their original behavior.\n\n### Patches\n\nThis issue is patched in 4.18.0.\n\n### Workarounds\n\nNone. Upgrade to the patched version.",
           "url": "https://osv.dev/vulnerability/GHSA-f23m-r3pf-42rh",
-          "retrievedAt": "2026-10-27T17:51:29.432Z"
+          "retrievedAt": "2026-11-03T03:03:25.568Z"
         }
       ]
     },
@@ -138,7 +138,7 @@
           "location": "node_modules/lodash · lodash@4.17.20",
           "excerpt": "### Impact\n\nLodash versions 4.0.0 through 4.17.22 are vulnerable to prototype pollution in the `_.unset` and `_.omit` functions. An attacker can pass crafted paths which cause Lodash to delete methods from global prototypes. \n\nThe issue permits deletion of properties but does not allow overwriting their original behavior.  \n\n### Patches\n\nThis issue is patched on 4.17.23.",
           "url": "https://osv.dev/vulnerability/GHSA-xxjr-mmjv-4gpg",
-          "retrievedAt": "2026-10-27T17:51:29.631Z"
+          "retrievedAt": "2026-11-03T03:03:26.020Z"
         }
       ]
     }
@@ -157,7 +157,7 @@
     {
       "name": "OSV advisories",
       "state": "complete",
-      "detail": "Live exact-version queries. Applicability requires human review."
+      "detail": "Queried 1/1 exact packages; retrieved 5/5 matched advisories; retained 5 findings. Applicability requires human review."
     }
   ],
   "status": "Blocked",

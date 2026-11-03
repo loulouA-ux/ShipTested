@@ -33,7 +33,7 @@ const peter: Actor = {
 const key = "sc_" + "a".repeat(64);
 beforeAll(async () => {
   await db.exec(readFileSync("migrations/001_core.sql", "utf8"));
-for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));
+for(const f of ['002_hosted_jobs','003_workspaces','004_team_sharing','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));
   await db.exec(readFileSync("migrations/001_core.sql", "utf8"));
 });
 afterAll(() => db.close());

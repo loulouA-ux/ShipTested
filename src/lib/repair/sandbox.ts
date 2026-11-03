@@ -2,6 +2,7 @@ import { brandEnv } from "../brand-env";
 import { Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";
 import { maskSecrets } from "../scanner";
+import {sandboxCredentials} from './credentials';
 import type { RepairSandbox, SandboxFactory } from "./runner";
 
 export function validateSnapshot(files:Record<string,string>){
@@ -21,8 +22,9 @@ export const sandboxCommands={
 } as const;
 export function vercelSandboxFactory():SandboxFactory{
  if(brandEnv("REPAIR_SANDBOX_ENABLED")!=="true")throw Error("Paid repair sandboxes are not enabled.");
+ const credentials=sandboxCredentials();
  return async(phase)=>{
-  const sandbox=await Sandbox.create({name:`shipcheck-${phase}-${randomUUID()}`,persistent:false,timeout:180000,resources:{vcpus:1},ports:[],networkPolicy:"deny-all"});
+  const sandbox=await Sandbox.create({...credentials,name:`shipcheck-${phase}-${randomUUID()}`,persistent:false,timeout:180000,resources:{vcpus:1},ports:[],networkPolicy:"deny-all"});
   const cwd=`${sandbox.cwd}/project`;
   try { await sandbox.mkDir(cwd); } catch { await sandbox.delete({deleteOrphanSnapshots:true});throw Error("Sandbox setup failed."); }
   let stopped=false;
@@ -41,9 +43,9 @@ export function vercelSandboxFactory():SandboxFactory{
     return {command:`npm ${args.join(" ")}`,exitCode:done.exitCode,output:maskSecrets(output)};
    },
    async readFile(path){
-    const stream=await sandbox.readFile({path,cwd});if(!stream)throw Error("Sandbox lockfile missing.");
+    const stream=await sandbox.readFile({path,cwd});if(!stream)throw Error("Sandbox dependency file missing.");
     const chunks:Buffer[]=[];let size=0;
-    for await(const chunk of stream){const b=Buffer.from(chunk);size+=b.length;if(size>200000){throw Error("Generated lockfile exceeds limit.");}chunks.push(b);}
+    for await(const chunk of stream){const b=Buffer.from(chunk);size+=b.length;if(size>200000){throw Error("Sandbox dependency file exceeds limit.");}chunks.push(b);}
     return Buffer.concat(chunks).toString("utf8");
    },
    async stop(){if(!stopped){await sandbox.delete({deleteOrphanSnapshots:true});stopped=true;}},

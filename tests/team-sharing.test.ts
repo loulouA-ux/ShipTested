@@ -16,7 +16,7 @@ const db=new PGlite();
 const query:Query=async(sql,params=[])=>(await db.query(sql,params)).rows as Record<string,unknown>[];
 const teams=new TeamAccess(query),shares=new ReportSharing(query);
 const owner={id:'github:1',workspaceId:'github:1',role:'member' as const};
-beforeAll(async()=>{for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','005_billing','007_api_tokens','008_repository_connections'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));});
+beforeAll(async()=>{for(const file of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','005_billing','007_api_tokens','008_repository_connections','009_batch_retry'])await db.exec(readFileSync(`migrations/${file}.sql`,'utf8'));});
 beforeEach(async()=>{
   await db.exec('TRUNCATE sc_workspaces CASCADE; DELETE FROM sc_report_shares; DELETE FROM sc_scan_jobs; DELETE FROM sc_scans; DELETE FROM sc_sessions; DELETE FROM sc_scan_allowances; DELETE FROM sc_github_accounts;');
   vi.stubEnv('SHIPTESTED_OPEN_REGISTRATION','1');

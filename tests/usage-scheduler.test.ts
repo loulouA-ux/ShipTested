@@ -7,7 +7,7 @@ import {workspaceUsage} from '../src/lib/server/usage';
 import {requireScheduler} from '../src/lib/server/scheduler';
 import {observeWorker} from '../src/lib/server/worker-telemetry';
 const db=new PGlite();const query:Query=async(sql,p=[])=>(await db.query(sql,p)).rows as Record<string,unknown>[];
-beforeAll(async()=>{for(const f of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','006_worker_runs'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
+beforeAll(async()=>{for(const f of ['001_core','002_hosted_jobs','003_workspaces','004_team_sharing','006_worker_runs','009_batch_retry'])await db.exec(readFileSync(`migrations/${f}.sql`,'utf8'));});
 afterAll(()=>db.close());afterEach(()=>vi.unstubAllEnvs());
 it('scopes metrics to own scans for members and workspace totals for owners',async()=>{
   await query("INSERT INTO sc_workspaces(id,owner_id,name,plan,seat_limit,seats_used) VALUES('team','owner','Team','team',3,3)");
